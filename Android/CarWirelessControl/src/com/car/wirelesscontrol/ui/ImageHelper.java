@@ -112,6 +112,7 @@ class ImageHelper
 		iv.setImageDrawable(drawable);
 		iv.setId(opcode);
 		iv.setAdjustViewBounds(true);
+		iv.setPadding(5, 5, 5, 5);
 		iv.setScaleType(ScaleType.CENTER_INSIDE);
 		return iv;
 	}
