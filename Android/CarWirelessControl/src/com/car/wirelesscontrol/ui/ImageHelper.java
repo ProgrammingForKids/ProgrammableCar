@@ -49,7 +49,6 @@ class ImageHelper
 		if (null != this.view)
 		{
 			this.view.setAlpha((float) 0.5);
-			this.view.setPadding(6, 6, 6, 6);
 			this.view.setBackgroundColor(Color.BLUE);
 			Logger.Log.t("SELECT");
 		}
@@ -65,9 +64,7 @@ class ImageHelper
 		if (null != this.view)
 		{
 			Logger.Log.t("UN-SELECT");
-			// this.view.getPaddingBottom()
 			this.view.setAlpha((float) 1.0);
-			this.view.setPadding(0, 0, 0, 0);
 		}
 		return this;
 	}
