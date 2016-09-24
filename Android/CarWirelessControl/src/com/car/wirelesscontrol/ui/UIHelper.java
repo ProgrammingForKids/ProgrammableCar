@@ -1,38 +1,43 @@
 package com.car.wirelesscontrol.ui;
 
 import com.car.programmator.ui.R;
-import com.car.wirelesscontrol.util.Logger;
 import com.car.wirelesscontrol.util.OpCode;
-
 import android.app.Activity;
 import android.content.ClipData;
 import android.support.v4.content.ContextCompat;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Pair;
 import android.view.DragEvent;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.View.DragShadowBuilder;
 import android.view.View.OnClickListener;
 import android.view.View.OnDragListener;
 import android.view.View.OnLongClickListener;
+import android.view.View.OnTouchListener;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public class UIHelper implements Eraser.Callback
 {
+	private final boolean	bDragDrop		= true;
+
 	private final int		SB_START		= R.drawable.start;
 	private final int		SB_STOP			= R.drawable.stop;
 
 	ImageHelper				_performed		= new ImageHelper();
-	ImageSelected			_imgselected	= null;
+	ImageHelper				_img_selected	= new ImageHelper();
 	TextView				_prompt			= null;
 	ImageView				_startBnt		= null;
 	Eraser					_eraser			= null;
-	LinearLayout			_area_tools		= null;
+	LinearLayout			_tools_area		= null;
 	LinearLayout			_current_area	= null;
 	private FlowLayout		_command_area	= null;
 	private boolean			_performMode	= false;
+
 	final Activity			_activity;
 	private final Chunkof	Chunk;
 
@@ -43,7 +48,9 @@ public class UIHelper implements Eraser.Callback
 		void onStopPerform();
 	}
 
-	private Callback mCallback;
+	private Callback	mCallback;
+	private int			_command_areaId;
+	private int			_tools_areaId;
 
 	void PerformMode(boolean b)
 	{
@@ -60,10 +67,10 @@ public class UIHelper implements Eraser.Callback
 		mCallback = callback;
 		Chunk = new Chunkof();
 		_activity = activity;
-		_imgselected = new ImageSelected(activity);
-		_eraser = new Eraser(activity, _imgselected);
+		_eraser = new Eraser(activity);
 		_eraser.registerCallBack(this);
-		_area_tools = (LinearLayout) activity.findViewById(R.id.area_tools);
+		_tools_area = (LinearLayout) activity.findViewById(R.id.area_tools);
+		_tools_areaId = _tools_area.getId();
 		_startBnt = (ImageView) activity.findViewById(R.id.image_tools);
 		_startBnt.setId(SB_START);
 		_startBnt.setOnClickListener(new OnClickListener()
@@ -87,7 +94,7 @@ public class UIHelper implements Eraser.Callback
 		});
 
 		_command_area = (FlowLayout) activity.findViewById(R.id.commandArea);
-		_command_area.setOnDragListener(myOnDragListener);
+		_command_areaId = _command_area.getId();
 
 		_prompt = (TextView) activity.findViewById(R.id.prompt);
 		_prompt.setVisibility(View.GONE);
@@ -107,10 +114,18 @@ public class UIHelper implements Eraser.Callback
 				}
 			});
 		}
-		ImageHelper.Store(activity, OpCode._FORWARD, _area_tools, _OnClickListenerOpcodeToView);
-		ImageHelper.Store(activity, OpCode._BACK, _area_tools, _OnClickListenerOpcodeToView);
-		ImageHelper.Store(activity, OpCode._LEFT, _area_tools, _OnClickListenerOpcodeToView);
-		ImageHelper.Store(activity, OpCode._RIGHT, _area_tools, _OnClickListenerOpcodeToView);
+		try
+		{
+			ImageHelper.Store(activity, OpCode._FORWARD, _tools_area).setOnTouchListener(new mTouchListener());
+			ImageHelper.Store(activity, OpCode._BACK, _tools_area).setOnTouchListener(new mTouchListener());
+			ImageHelper.Store(activity, OpCode._LEFT, _tools_area).setOnTouchListener(new mTouchListener());
+			ImageHelper.Store(activity, OpCode._RIGHT, _tools_area).setOnTouchListener(new mTouchListener());
+		}
+		catch (NullPointerException e)
+		{
+		}
+		_tools_area.setOnDragListener(new mDragListener());
+		_command_area.setOnDragListener(new mDragListener());
 
 	}
 
@@ -130,131 +145,23 @@ public class UIHelper implements Eraser.Callback
 
 	}
 
-	private void SelectNewStep(View v)
-	{
-		int count = _command_area.getChildCount();
-		for (int index = 0; index < count; ++index)
-		{
-			View test = _command_area.getChildAt(index);
-			if (test.equals(v))
-			{
-				_imgselected.Set(v, index);
-				_command_area.addView(_imgselected.InsertView(), index);
-				_imgselected.InsertView().setOnLongClickListener(myOnLongClickListener);
-				IsCommandStringChanged();
-				break;
-			}
-		}
-	}
+	OnLongClickListener	myOnLongClickListener	= new OnLongClickListener()
+												{
 
-	private void UnselectSelectedStep()
-	{
-		_command_area.removeView(_imgselected.InsertView());
-		_imgselected.Unselect();
-		IsCommandStringChanged();
-	}
-
-	OnClickListener		_OnClickSelectInsert			= new OnClickListener()
+													@Override
+													public boolean onLongClick(View v)
+													{
+														if (_performMode)
 														{
-															@Override
-															public void onClick(View v)
-															{
-																if (_performMode)
-																{
-																	return;
-																}
-																Logger.Log.t("SELECT");
-																if (_imgselected.IsSelected() && !v.equals(_imgselected.SelectedView()))
-																{
-																	UnselectSelectedStep();
-																	SelectNewStep(v);
-																	return;
-																}
+															return true;
+														}
+														ClipData data = ClipData.newPlainText("", "");
+														DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
+														v.startDrag(data, shadowBuilder, v, 0);
+														return true;
+													}
 
-																if (v.equals(_imgselected.SelectedView()))
-																{
-																	UnselectSelectedStep();
-																	return;
-																}
-																SelectNewStep(v);
-															}
-
-														};
-
-	OnClickListener		_OnClickListenerOpcodeToView	= new OnClickListener()
-														{
-
-															@Override
-															public void onClick(View v)
-															{
-																if (_performMode)
-																{
-																	return;
-																}
-																ImageView iv = ImageToCommandArea(v.getId());
-																if (-1 < _imgselected.InsertIndex())
-																{
-																	_command_area.addView(iv, _imgselected.InsertIndex());
-																	_command_area.removeView(_imgselected.InsertView());
-																	_imgselected.Unselect();
-																}
-																else
-																{
-																	_command_area.addView(iv);
-																}
-																IsCommandStringChanged();
-															}
-														};
-
-	OnLongClickListener	myOnLongClickListener			= new OnLongClickListener()
-														{
-
-															@Override
-															public boolean onLongClick(View v)
-															{
-																if (_performMode)
-																{
-																	return true;
-																}
-																ClipData data = ClipData.newPlainText("", "");
-																DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
-																v.startDrag(data, shadowBuilder, v, 0);
-																return true;
-															}
-
-														};
-
-	OnDragListener		myOnDragListener				= new OnDragListener()
-														{
-
-															@Override
-															public boolean onDrag(View v, DragEvent event)
-															{
-																switch (event.getAction())
-																{
-																	case DragEvent.ACTION_DRAG_ENDED:
-																		if (!_performMode)
-																		{
-																			View view = (View) event.getLocalState();
-																			if (OpCode._INSERT == view.getId())
-																			{
-																				UnselectSelectedStep();
-																			}
-																			_command_area.removeView(view);
-																			IsCommandStringChanged();
-																		}
-																		break;
-																	case DragEvent.ACTION_DRAG_STARTED:
-																	case DragEvent.ACTION_DRAG_ENTERED:
-																	case DragEvent.ACTION_DRAG_EXITED:
-																	case DragEvent.ACTION_DROP:
-																	default:
-																		break;
-																}
-																return true;
-															}
-
-														};
+												};
 
 	private MenuItem	_showFileMenuItem;
 	private String		_commandString;
@@ -303,7 +210,7 @@ public class UIHelper implements Eraser.Callback
 	{
 		if (IsPerformedValid())
 		{
-			_performed.UnSelect();
+			_performed.Unselect();
 		}
 		return this;
 	}
@@ -343,7 +250,7 @@ public class UIHelper implements Eraser.Callback
 
 	boolean IsSelected()
 	{
-		return _imgselected.IsSelected();
+		return true;
 	}
 
 	// Command area
@@ -382,7 +289,7 @@ public class UIHelper implements Eraser.Callback
 		ImageView iv = ImageHelper.CreateImage(_activity, id);
 		if (null != iv)
 		{
-			iv.setOnClickListener(_OnClickSelectInsert);
+			// iv.setOnClickListener(_OnClickSelectInsert);
 			iv.setOnLongClickListener(myOnLongClickListener);
 
 		}
@@ -434,6 +341,79 @@ public class UIHelper implements Eraser.Callback
 	{
 		IsCommandStringChanged();
 	}
+
+	private final class mTouchListener implements OnTouchListener
+	{
+
+		public boolean onTouch(View view, MotionEvent motionEvent)
+		{
+			if (!bDragDrop)
+			{
+				return false;
+			}
+			if (motionEvent.getAction() == MotionEvent.ACTION_DOWN)
+			{
+				ClipData data = ClipData.newPlainText("", "");
+				DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
+				view.startDrag(data, shadowBuilder, view, 0);
+				// view.setVisibility(View.INVISIBLE);
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}// class MyTouchListener
+
+	class mDragListener implements OnDragListener
+	{
+		@Override
+		public boolean onDrag(View v, DragEvent event)
+		{
+
+			// Logger.Log.t(event.getAction(),(int) event.getX(), (int) event.getY());
+
+			switch (event.getAction())
+			{
+				case DragEvent.ACTION_DRAG_LOCATION:
+					if (_command_areaId == v.getId())
+					{
+						Pair<View, Integer> p = _command_area.GetIndex((int) event.getX(), (int) event.getY());
+						_img_selected.Unselect();
+						_img_selected.Set(p.first, p.second);
+						_img_selected.Select();
+					}
+					break;
+				case DragEvent.ACTION_DROP:
+
+					// Dropped, reassign View to ViewGroup
+					View view = (View) event.getLocalState();
+					ViewGroup owner = (ViewGroup) view.getParent();
+					if (_command_areaId == owner.getId())
+					{
+						owner.removeView(view);
+						break;
+					}
+					if (_command_areaId == v.getId() && _tools_areaId == owner.getId())
+					{
+						_img_selected.Unselect();
+						FlowLayout container = (FlowLayout) v;
+						ImageView iv = ImageToCommandArea(view.getId());
+						container.addView(iv, _img_selected.index);
+					}
+					break;
+				case DragEvent.ACTION_DRAG_STARTED:
+				case DragEvent.ACTION_DRAG_EXITED:
+				case DragEvent.ACTION_DRAG_ENTERED:
+				case DragEvent.ACTION_DRAG_ENDED:
+				default:
+					break;
+			}
+			return true;
+		}
+
+	}// class MyDragListener
 
 	// ------------------------------------------------------------------
 	// class Chunkof

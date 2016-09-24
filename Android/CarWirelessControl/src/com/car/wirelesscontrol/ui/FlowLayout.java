@@ -5,7 +5,9 @@ import com.car.programmator.ui.R;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -130,6 +132,21 @@ public class FlowLayout extends ViewGroup
 				xpos += childw + PAD_H;
 			}
 		}
+	}
+
+	public Pair<View,Integer> GetIndex(int x, int y)
+	{
+		int count = this.getChildCount();
+		for (int k = 0; k < count; ++k)
+		{
+			View v = this.getChildAt(k);
+			Rect r = new Rect(v.getLeft(), v.getTop(), v.getRight(), v.getBottom());
+			if (r.contains(x, y))
+			{
+				return new Pair<View, Integer>(v, k);
+			}
+		}
+		return new Pair<View, Integer>(null, -1);
 	}
 
 }// class FlowLayout

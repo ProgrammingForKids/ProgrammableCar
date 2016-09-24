@@ -11,7 +11,6 @@ public class Eraser
 {
 	private final ImageView		_eraser;
 	private final FlowLayout	_command_aria;
-	private final ImageSelected	_selected_image;
 
 	public interface Callback
 	{
@@ -25,10 +24,8 @@ public class Eraser
 		mCallback = callback;
 	}
 
-	
-	public Eraser(Activity activity, final ImageSelected selectedImage)
+	public Eraser(Activity activity)
 	{
-		_selected_image = selectedImage;
 		_command_aria = (FlowLayout) activity.findViewById(R.id.commandArea);
 		_eraser = (ImageView) activity.findViewById(R.id.image_eraser);
 		_eraser.setOnClickListener(new OnClickListener()
@@ -37,17 +34,7 @@ public class Eraser
 			@Override
 			public void onClick(View v)
 			{
-				int index = -1;
-				if (_selected_image.IsInsertActive())
-				{
-					index = _selected_image.InsertIndex();
-					_command_aria.removeView(_selected_image.InsertView());
-					_selected_image.Unselect();
-				}
-				else
-				{
-					index = _command_aria.getChildCount();
-				}
+				int index = _command_aria.getChildCount();
 				if (0 < index)
 				{
 					_command_aria.removeViewAt(index - 1);
@@ -61,7 +48,6 @@ public class Eraser
 			@Override
 			public boolean onLongClick(View v)
 			{
-				_selected_image.Unselect();
 				_command_aria.removeAllViews();
 				mCallback.onErase();
 				return false;
