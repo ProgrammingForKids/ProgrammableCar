@@ -76,7 +76,7 @@ public class MainActivity extends Activity implements BlueToothHelper.Callback, 
 						m_bth.FoundDeviceList().add("Found Device List is empty");
 					}
 					m_bth.EndWait();
-					m_bth.StartDiscovery();
+					m_bth.CancelDiscovery();
 					ShowDevices(m_bth.FoundDeviceList());
 				}
 			}
