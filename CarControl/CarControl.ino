@@ -9,22 +9,20 @@ const unsigned long MAX_DISTANCE = 35;
 
 /*
  * Ultrasonic sensor
-  - Pin 10 ---> echo // yellow
-  - Pin 11 ---> trig // green
+  - Pin 16 (A2) ---> echo // yellow
+  - Pin 15 (A1) ---> trig // green
 // blue - vcc
-  - Pin 13 ---> optional signal led
+  - Pin LED_BUILTIN ---> optional signal led
 */
-Outlook outlook(10, 11, MAX_DISTANCE, 13);
+Outlook outlook(16, 15, MAX_DISTANCE, LED_BUILTIN);
 
-/*
-
-  Bluetooth
-  - Pin 12 ---> TX // purple
-  - Pin 2  ---> RX // brown
+/*  Bluetooth
+  - Pin 14(A0) ---> TX // purple
+  - Pin 17(A3)  ---> RX // orange
   // ground - blk
   // vcc - white, gray - ground
 */
-SoftwareSerial BT(12, 2);
+SoftwareSerial BT(14, 17);
 
 /*
   Connections:
