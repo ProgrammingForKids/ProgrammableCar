@@ -3,23 +3,27 @@ package com.car.wirelesscontrol.util;
 import java.util.ArrayList;
 import java.util.Set;
 
-import com.car.programmator.ui.R;
-
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
+import android.util.Pair;
 
 public class BlueToothHelper implements BluetoothConnectedThread.Callback
 {
-	static final int			REQUEST_ENABLE_BT			= 1;
-	final static int			RECIEVE_MESSAGE				= 1;
+	static final int					REQUEST_ENABLE_BT			= 1;
+	static final int					RECIEVE_MESSAGE				= 1;
+	private final int					OurBluetoothClass			= BluetoothClass.Device.TOY_VEHICLE;
 
-	private BluetoothAdapter	_bluetoothAdapter			= null;
-	BluetoothConnectedThread	_BluetoothConnectedThread	= null;
-	private ArrayList<String>	_bondedDeviceList			= null;
-	private ArrayList<String>	_foundDeviceList			= null;
-	final Activity				_activity;
+	private BluetoothAdapter			_bluetoothAdapter			= null;
+	private BluetoothConnectedThread	_BluetoothConnectedThread	= null;
+	private ProgressDialog				_dialog						= null;
+	private final ArrayList<String>		_bondedDeviceList;
+	private final ArrayList<String>		_foundDeviceList;
+	private final Activity				_activity;
+	private final ActionBarHelper		_actionbar;
 
 	public ArrayList<String> DevicesList()
 	{
@@ -35,66 +39,60 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 		final char	PERFORM_ERROR		= BluetoothConnectedThread.Callback.PERFORM_ERROR;
 
 		void BluetoothResponse(char c);
-
-		void HeartbeatStart(boolean ret);
 	}
 
-	private Callback mCallback;
+	private Callback	mCallback		= null;
+	private int			mIndex			= -1;
+	private boolean		mTryToConnect	= false;
 
 	public BlueToothHelper(Activity activity, Callback callback)
 	{
-		this.mCallback = callback;
+		mCallback = callback;
 		_activity = activity;
-		_activity.getActionBar().setTitle(BluetoothConnectedThread.DefaultDeviceName);
 		_bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 		_bondedDeviceList = new ArrayList<String>();
 		_foundDeviceList = new ArrayList<String>();
+		_actionbar = new ActionBarHelper(_activity);
+		_actionbar.ShowStatus(BluetoothConnectedThread.DefaultDeviceName, false);
 	}
 
-	public void SetLED(boolean bGreen)
-	{
-		int resId = (bGreen) ? R.drawable.green : R.drawable.red;
-		this._activity.getActionBar().setIcon(resId);
-	}
-
-	public boolean isConnected()
+	public boolean IsConnected()
 	{
 		boolean ret = false;
-		String title = "";
 		if (null != _BluetoothConnectedThread)
 		{
 			ret = _BluetoothConnectedThread.isConnected();
-			title = _BluetoothConnectedThread.DeviceName();
 		}
-		this._activity.getActionBar().setTitle(title);
-		SetLED(ret);
+		_actionbar.ShowStatus(ret);
 		return ret;
 	}
 
-	public void startScanDevice()
+	public boolean ShowConnectStatus()
 	{
-		// // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
-		// {
-		// mScanCallback = new ScanCallback()
-		// {
-		// @Override
-		// public void onScanResult(int callbackType, ScanResult result)
-		// {
-		// super.onScanResult(callbackType, result);
-		// Logger.Log.t("SCANNER", result.getDevice());
-		// }
-		// };
-		//
-		// final BluetoothManager bluetoothManager = (BluetoothManager)
-		// _activity.getSystemService(Context.BLUETOOTH_SERVICE);
-		// mBluetoothAdapter = bluetoothManager.getAdapter();
-		// BluetoothLeScanner bluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
-		// bluetoothLeScanner.startScan(mScanCallback);
-		// }
-		// // else
-		// // {
-		// // bluetoothAdapter.startLeScan(leScanCallback);
-		// // }
+		EndWait();
+		if (null == _BluetoothConnectedThread)
+		{
+			Logger.Log.t("BluetoothConnectedThread==null");
+			_actionbar.ShowStatus(BluetoothConnectedThread.DefaultDeviceName, false);
+			return false;
+		}
+
+		Pair<Boolean, String> p = _BluetoothConnectedThread.IsConnected();
+		_actionbar.ShowStatus(p.second, p.first);
+		if (!p.first)
+		{
+			if (mTryToConnect)
+			{
+				mIndex -= 1;
+				mTryToConnect();
+			}
+		}
+		else
+		{
+			mIndex = -1;
+			mTryToConnect = false;
+		}
+		return p.first;
 	}
 
 	public void StartDiscovery()
@@ -110,12 +108,23 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 		}
 	}
 
+	public void CancelDiscovery()
+	{
+		if (null != _bluetoothAdapter)
+		{
+			if (_bluetoothAdapter.isDiscovering())
+			{
+				_bluetoothAdapter.cancelDiscovery();
+			}
+		}
+	}
+
 	public void Finalize()
 	{
 		if (null != _BluetoothConnectedThread)
 		{
-			BluetoothConnectedThread tmp = _BluetoothConnectedThread;
-			tmp.Cancel();
+			BluetoothConnectedThread tmpBluetoothConnectedThr = _BluetoothConnectedThread;
+			tmpBluetoothConnectedThr.Cancel();
 			_BluetoothConnectedThread = null;
 		}
 	}
@@ -135,7 +144,7 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 		{
 			if (_bluetoothAdapter.isEnabled())
 			{
-				BluetoothStatus();
+				// BluetoothStatus();
 				return true;
 			}
 			else
@@ -148,10 +157,10 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 		return true;
 	}
 
-	public void IsBondedDevice()
+	public void BondedDeviceList()
 	{
 		checkBTState();
-		if (!isReady())
+		if (!(_bluetoothAdapter.getState() == BluetoothAdapter.STATE_ON))
 		{
 			return;
 		}
@@ -164,63 +173,40 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 			// Loop through paired devices
 			for (BluetoothDevice device : pairedDevices)
 			{
-				String list = device.getName() + "@" + device.getAddress();
-				_bondedDeviceList.add(list);
-				Logger.Log.t("BondedDevice", list);
+				if (IsOurClass(device.getBluetoothClass()))
+				{
+					String list = device.getName() + "@" + device.getAddress();
+					_bondedDeviceList.add(list);
+				}
 			}
 		}
 	}
 
-	void BluetoothStatus()
+	public boolean IsOurClass(BluetoothClass cls)
 	{
-		String status;
-		if (_bluetoothAdapter.isEnabled())
-		{
-			String mydeviceaddress = _bluetoothAdapter.getAddress();
-			String mydevicename = _bluetoothAdapter.getName();
-			int state = _bluetoothAdapter.getState();
-			status = mydevicename + " : " + mydeviceaddress + " : " + State(state);
-		}
-		else
-		{
-			status = "Bluetooth Off";
-		}
-		Logger.Log.t("BluetoothStatus", status);
+		Logger.Log.e("Bluetooth", "class", cls.getDeviceClass());
+		return (OurBluetoothClass == cls.getDeviceClass());
 	}
 
-	public boolean isReady()
+	public void ConnectToBluetothDevice(final String name_mac)
 	{
-		return (_bluetoothAdapter.getState() == BluetoothAdapter.STATE_ON);
-	}
-
-	String State(int s)
-	{
-		switch (s)
+		BeginWait();
+		if (!ConnectToBTDevice(name_mac))
 		{
-			case BluetoothAdapter.STATE_ON:
-				return "On";
-			case BluetoothAdapter.STATE_TURNING_ON:
-				return "Turning On";
-			case BluetoothAdapter.STATE_OFF:
-				return "Off";
-			case BluetoothAdapter.STATE_TURNING_OFF:
-				return "Turning Off";
-			default:
-				break;
+			EndWait();
 		}
-		return "";
 	}
 
-	public void ConnectToBTDevice(final String name_mac)
+	private boolean ConnectToBTDevice(final String name_mac)
 	{
 		if (null == _bluetoothAdapter)
 		{
-			return;
+			return false;
 		}
 		int pos = name_mac.lastIndexOf("@");
 		if (pos == -1)
 		{
-			return;
+			return false;
 		}
 		final String mac = name_mac.substring(pos + 1);
 		// Set up a pointer to the remote node using it's address.
@@ -229,23 +215,47 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 			BluetoothConnectedThread tmp = _BluetoothConnectedThread;
 			tmp.Cancel();
 		}
+		InitAndStartBluetoothConnectedThreadAsync(mac);
+		return true;
+	}
 
-		_BluetoothConnectedThread = new BluetoothConnectedThread(this);
-		if (_BluetoothConnectedThread.Init(_bluetoothAdapter, mac))
-		{
-			_BluetoothConnectedThread.start();
-		}
-
+	void InitAndStartBluetoothConnectedThreadAsync(final String mac)
+	{
 		new android.os.Handler().postDelayed(
 				new Runnable()
 				{
 					public void run()
 					{
-						isConnected();
+						boolean res = InitAndStartBluetoothConnectedThread(mac);
+						Logger.Log.t("AUTO", mac, res);
+						IsConnectedAsync();
 					}
 				},
-				2000);
+				1000);
+	}
 
+	boolean InitAndStartBluetoothConnectedThread(final String mac)
+	{
+		_BluetoothConnectedThread = new BluetoothConnectedThread(this);
+		if (_BluetoothConnectedThread.Init(_bluetoothAdapter, mac))
+		{
+			_BluetoothConnectedThread.start();
+			return true;
+		}
+		return false;
+	}
+
+	void IsConnectedAsync()
+	{
+		new android.os.Handler().postDelayed(
+				new Runnable()
+				{
+					public void run()
+					{
+						ShowConnectStatus();
+					}
+				},
+				5000);
 	}
 
 	public void Send(final String comm)
@@ -257,19 +267,7 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 		else
 		{
 			mCallback.BluetoothResponse(Callback.CONNECT_ERROR);
-		}
-	}
-
-	public void Send(final char c)
-	{
-		if (null != _BluetoothConnectedThread)
-		{
-			Logger.Log.t("SEND GET", c);
-			_BluetoothConnectedThread.Send(c);
-		}
-		else
-		{
-			mCallback.BluetoothResponse(Callback.CONNECT_ERROR);
+			ShowBluetoothStatus();
 		}
 	}
 
@@ -277,5 +275,80 @@ public class BlueToothHelper implements BluetoothConnectedThread.Callback
 	public void BluetoothRespose(char c)
 	{
 		mCallback.BluetoothResponse(c);
+	}
+
+	public void TryToConnect()
+	{
+		BondedDeviceList();
+		mIndex = _bondedDeviceList.size() - 1;
+		if (-1 < mIndex)
+		{
+			mTryToConnect = true;
+			mTryToConnect();
+		}
+		else
+		{
+			Logger.Log.t("No Bonded Devices");
+		}
+	}
+
+	public void mTryToConnect()
+	{
+		if (0 <= mIndex && _bondedDeviceList.size() > mIndex)
+		{
+			BeginWait();
+			if (ConnectToBTDevice(_bondedDeviceList.get(mIndex)))
+			{
+				EndWait();
+			}
+		}
+		else
+		{
+			mIndex = -1;
+			mTryToConnect = false;
+		}
+	}
+
+	public void BeginWait()
+	{
+		_dialog = CustomProgressDialog.ctor(_activity);// ProgressDialog.show(_activity, null, "// ",
+		_dialog.show();
+	}
+
+	public void EndWait()
+	{
+		if (null != _dialog)
+		{
+			if (_dialog.isShowing())
+			{
+				_dialog.dismiss();
+			}
+		}
+	}
+
+	@Override
+	public void ShowBluetoothStatus()
+	{
+		Logger.Log.t("ShowBluetoothStatus");
+		_activity.runOnUiThread(new Runnable()
+		{
+			public void run()
+			{
+				boolean b = ShowConnectStatus();
+				Logger.Log.t("Connect STATUS1",b);
+			}
+		});
+	}
+
+	@Override
+	public void ShowBluetoothErrorStatus()
+	{
+		_activity.runOnUiThread(new Runnable()
+		{
+			public void run()
+			{
+				// _actionbar.ShowStatus(false);
+			}
+		});
 	}
 }// class BlueToothHelper

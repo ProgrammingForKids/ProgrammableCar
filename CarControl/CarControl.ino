@@ -93,7 +93,7 @@ bool ProbeOutlook()
     }
     else
     {
-      outlookConstrain.set(20);    
+      outlookConstrain.set(50);    
     }
   }
 
@@ -143,6 +143,7 @@ struct MoveOp
     if (bNewCommand)
     {
       wheelsConstrain.set(0);
+      actionConstrain.set(Traits::ActionTime());
     }
     
     if (bNewCommand || wheelsConstrain.check())
@@ -273,6 +274,7 @@ void loop()
 
   default:
     BT.print('X');
+    Log("Reply X");
     reply = '\0';
     ongoingOp = '\0';
     actionConstrain.set(0);

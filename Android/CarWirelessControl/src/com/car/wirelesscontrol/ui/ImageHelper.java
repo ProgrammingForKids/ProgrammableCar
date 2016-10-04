@@ -1,6 +1,5 @@
 package com.car.wirelesscontrol.ui;
 
-import com.car.wirelesscontrol.util.Logger;
 import com.car.wirelesscontrol.util.OpCode;
 
 import android.content.Context;
@@ -8,7 +7,6 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.support.v4.content.ContextCompat;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 import android.widget.LinearLayout;
@@ -22,6 +20,12 @@ class ImageHelper
 	{
 	}
 
+	public ImageHelper(View v, int index)
+	{
+		this.view = v;
+		this.index = index;
+	}
+
 	void Ini()
 	{
 		this.view = null;
@@ -32,6 +36,20 @@ class ImageHelper
 	{
 		this.view = v;
 		this.index = index;
+		return this;
+	}
+
+	ImageHelper Set(final ImageHelper other)
+	{
+		if (null == other)
+		{
+			Ini();
+		}
+		else
+		{
+			this.view = other.view;
+			this.index = other.index;
+		}
 		return this;
 	}
 
@@ -49,9 +67,7 @@ class ImageHelper
 		if (null != this.view)
 		{
 			this.view.setAlpha((float) 0.5);
-			this.view.setPadding(6, 6, 6, 6);
 			this.view.setBackgroundColor(Color.BLUE);
-			Logger.Log.t("SELECT");
 		}
 	}
 
@@ -60,14 +76,12 @@ class ImageHelper
 		return (null != view);
 	}
 
-	ImageHelper UnSelect()
+	ImageHelper Unselect()
 	{
 		if (null != this.view)
 		{
-			Logger.Log.t("UN-SELECT");
-			// this.view.getPaddingBottom()
 			this.view.setAlpha((float) 1.0);
-			this.view.setPadding(0, 0, 0, 0);
+			this.view.setBackgroundColor(Color.TRANSPARENT);
 		}
 		return this;
 	}
@@ -112,20 +126,21 @@ class ImageHelper
 		iv.setImageDrawable(drawable);
 		iv.setId(opcode);
 		iv.setAdjustViewBounds(true);
+		iv.setPadding(5, 5, 5, 5);
 		iv.setScaleType(ScaleType.CENTER_INSIDE);
 		return iv;
 	}
 
-	public static void Store(Context context, int id, LinearLayout ll, OnClickListener listener)
+	public static ImageView Store(Context context, int id, LinearLayout ll)
 	{
 		ImageView iv = CreateImage(context, id);
 		if (null == iv)
 		{
-			return;
+			return null;
 		}
 		iv.setPadding(5, 5, 5, 5);
-		iv.setOnClickListener(listener);
 		ll.addView(iv, 0);
+		return iv;
 	}
 
 }// class Selected

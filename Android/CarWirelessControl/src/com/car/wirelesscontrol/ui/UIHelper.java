@@ -1,38 +1,43 @@
 package com.car.wirelesscontrol.ui;
 
 import com.car.programmator.ui.R;
-import com.car.wirelesscontrol.util.Logger;
 import com.car.wirelesscontrol.util.OpCode;
-
 import android.app.Activity;
 import android.content.ClipData;
 import android.support.v4.content.ContextCompat;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Pair;
 import android.view.DragEvent;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.View.DragShadowBuilder;
 import android.view.View.OnClickListener;
 import android.view.View.OnDragListener;
 import android.view.View.OnLongClickListener;
+import android.view.View.OnTouchListener;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public class UIHelper implements Eraser.Callback
 {
+	private final boolean	bDragDrop		= true;
+
 	private final int		SB_START		= R.drawable.start;
 	private final int		SB_STOP			= R.drawable.stop;
 
 	ImageHelper				_performed		= new ImageHelper();
-	ImageSelected			_imgselected	= null;
+	ImageHelper				_img_selected	= new ImageHelper();
 	TextView				_prompt			= null;
 	ImageView				_startBnt		= null;
 	Eraser					_eraser			= null;
-	LinearLayout			_area_tools		= null;
+	LinearLayout			_tools_area		= null;
 	LinearLayout			_current_area	= null;
-	private FlowLayout		_command_aria	= null;
+	private FlowLayout		_command_area	= null;
 	private boolean			_performMode	= false;
+
 	final Activity			_activity;
 	private final Chunkof	Chunk;
 
@@ -43,7 +48,9 @@ public class UIHelper implements Eraser.Callback
 		void onStopPerform();
 	}
 
-	private Callback mCallback;
+	private Callback	mCallback;
+	private int			_command_areaId;
+	private int			_tools_areaId;
 
 	void PerformMode(boolean b)
 	{
@@ -60,10 +67,10 @@ public class UIHelper implements Eraser.Callback
 		mCallback = callback;
 		Chunk = new Chunkof();
 		_activity = activity;
-		_imgselected = new ImageSelected(activity);
-		_eraser = new Eraser(activity, _imgselected);
+		_eraser = new Eraser(activity);
 		_eraser.registerCallBack(this);
-		_area_tools = (LinearLayout) activity.findViewById(R.id.area_tools);
+		_tools_area = (LinearLayout) activity.findViewById(R.id.area_tools);
+		_tools_areaId = _tools_area.getId();
 		_startBnt = (ImageView) activity.findViewById(R.id.image_tools);
 		_startBnt.setId(SB_START);
 		_startBnt.setOnClickListener(new OnClickListener()
@@ -86,12 +93,12 @@ public class UIHelper implements Eraser.Callback
 			}
 		});
 
-		_command_aria = (FlowLayout) activity.findViewById(R.id.test);
-		_command_aria.setOnDragListener(myOnDragListener);
+		_command_area = (FlowLayout) activity.findViewById(R.id.commandArea);
+		_command_areaId = _command_area.getId();
 
 		_prompt = (TextView) activity.findViewById(R.id.prompt);
 		_prompt.setVisibility(View.GONE);
-		if (_prompt.isShown())
+		// if (_prompt.isShown())
 		{
 			// make TextView scrollable
 			_prompt.setMovementMethod(new ScrollingMovementMethod());
@@ -107,119 +114,55 @@ public class UIHelper implements Eraser.Callback
 				}
 			});
 		}
-		ImageHelper.Store(activity, OpCode._FORWARD, _area_tools, _OnClickListenerOpcodeToView);
-		ImageHelper.Store(activity, OpCode._BACK, _area_tools, _OnClickListenerOpcodeToView);
-		ImageHelper.Store(activity, OpCode._LEFT, _area_tools, _OnClickListenerOpcodeToView);
-		ImageHelper.Store(activity, OpCode._RIGHT, _area_tools, _OnClickListenerOpcodeToView);
+		try
+		{
+			ImageHelper.Store(activity, OpCode._FORWARD, _tools_area).setOnTouchListener(new mTouchListener());
+			ImageHelper.Store(activity, OpCode._BACK, _tools_area).setOnTouchListener(new mTouchListener());
+			ImageHelper.Store(activity, OpCode._LEFT, _tools_area).setOnTouchListener(new mTouchListener());
+			ImageHelper.Store(activity, OpCode._RIGHT, _tools_area).setOnTouchListener(new mTouchListener());
+		}
+		catch (NullPointerException e)
+		{
+		}
+		_tools_area.setOnDragListener(new mDragListener());
+		_command_area.setOnDragListener(new mDragListener());
 
 	}
 
-	OnClickListener		_OnClickSelectInsert			= new OnClickListener()
+	public void SetPrompt(boolean b)
+	{
+		int vis = (b) ? View.VISIBLE : View.GONE;
+		_prompt.setVisibility(vis);
+	}
+
+	public void SetPrompt(String txt)
+	{
+		if (_prompt.isShown())
+		{
+			String str = _prompt.getText().toString();
+			_prompt.setText(str + txt);
+		}
+
+	}
+
+	OnLongClickListener	myOnLongClickListener	= new OnLongClickListener()
+												{
+
+													@Override
+													public boolean onLongClick(View v)
+													{
+														if (_performMode)
 														{
-															@Override
-															public void onClick(View v)
-															{
-																if (_performMode)
-																{
-																	return;
-																}
-																Logger.Log.t("SELECT");
-																if (v.equals(_imgselected.SelectedView()))
-																{
-																	_command_aria.removeView(_imgselected.InsertView());
-																	_imgselected.Unselect();
-																	IsCommandStringChanged();
-																	return;
-																}
-																int count = _command_aria.getChildCount();
-																for (int index = 0; index < count; ++index)
-																{
-																	View test = _command_aria.getChildAt(index);
-																	if (test.equals(v))
-																	{
-																		_imgselected.Set(v, index);
-																		_command_aria.addView(_imgselected.InsertView(), index);
-																		IsCommandStringChanged();
-																		break;
-																	}
-																}
-															}
-														};
+															return true;
+														}
+														ClipData data = ClipData.newPlainText("", "");
+														DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
+														v.startDrag(data, shadowBuilder, v, 0);
+														return true;
+													}
 
-	OnClickListener		_OnClickListenerOpcodeToView	= new OnClickListener()
-														{
+												};
 
-															@Override
-															public void onClick(View v)
-															{
-																if (_performMode)
-																{
-																	return;
-																}
-																ImageView iv = ImageToCommandArea(v.getId());
-																if (-1 < _imgselected.InsertIndex())
-																{
-																	_command_aria.addView(iv, _imgselected.InsertIndex());
-																	_command_aria.removeView(_imgselected.InsertView());
-																	_imgselected.Unselect();
-																}
-																else
-																{
-																	_command_aria.addView(iv);
-																}
-																IsCommandStringChanged();
-															}
-														};
-
-	OnLongClickListener	myOnLongClickListener			= new OnLongClickListener()
-														{
-
-															@Override
-															public boolean onLongClick(View v)
-															{
-																if (_performMode)
-																{
-																	return true;
-																}
-																ClipData data = ClipData.newPlainText("", "");
-																DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
-																v.startDrag(data, shadowBuilder, v, 0);
-																return true;
-															}
-
-														};
-
-	OnDragListener		myOnDragListener				= new OnDragListener()
-														{
-
-															@Override
-															public boolean onDrag(View v, DragEvent event)
-															{
-																switch (event.getAction())
-																{
-																	case DragEvent.ACTION_DRAG_STARTED:
-																		break;
-																	case DragEvent.ACTION_DRAG_ENTERED:
-																		break;
-																	case DragEvent.ACTION_DRAG_EXITED:
-																		break;
-																	case DragEvent.ACTION_DROP:
-																		break;
-																	case DragEvent.ACTION_DRAG_ENDED:
-																		if (!_performMode)
-																		{
-																			View view = (View) event.getLocalState();
-																			_command_aria.removeView(view);
-																			IsCommandStringChanged();
-																		}
-																		break;
-																	default:
-																		break;
-																}
-																return true;
-															}
-
-														};
 	private MenuItem	_showFileMenuItem;
 	private String		_commandString;
 	private int			_fileIconId;
@@ -233,9 +176,9 @@ public class UIHelper implements Eraser.Callback
 	{
 		if (!IsSelected())
 		{
-			if (-1 < _performed.index && _performed.index < _command_aria.getChildCount())
+			if (-1 < _performed.index && _performed.index < _command_area.getChildCount())
 			{
-				_performed.view = _command_aria.getChildAt(_performed.index);
+				_performed.view = _command_area.getChildAt(_performed.index);
 				++_performed.index;
 				_performed.Select();
 			}
@@ -267,7 +210,7 @@ public class UIHelper implements Eraser.Callback
 	{
 		if (IsPerformedValid())
 		{
-			_performed.UnSelect();
+			_performed.Unselect();
 		}
 		return this;
 	}
@@ -307,17 +250,17 @@ public class UIHelper implements Eraser.Callback
 
 	boolean IsSelected()
 	{
-		return _imgselected.IsSelected();
+		return true;
 	}
 
 	// Command area
 	public String CommandToString()
 	{
 		String ret = "";
-		int count = _command_aria.getChildCount();
+		int count = _command_area.getChildCount();
 		for (int k = 0; k < count; ++k)
 		{
-			View v = _command_aria.getChildAt(k);
+			View v = _command_area.getChildAt(k);
 			char c = OpCode.OpcodeC(v.getId());
 			ret += c;
 		}
@@ -327,7 +270,7 @@ public class UIHelper implements Eraser.Callback
 	public void StringToCommand(String commands)
 	{
 		SaveCommandString(commands);
-		_command_aria.removeAllViews();
+		_command_area.removeAllViews();
 		int length = commands.length();
 		for (int k = 0; k < length; ++k)
 		{
@@ -336,7 +279,7 @@ public class UIHelper implements Eraser.Callback
 			if (0 != id)
 			{
 				ImageView iv = ImageToCommandArea(id);
-				_command_aria.addView(iv);
+				_command_area.addView(iv);
 			}
 		}
 	}
@@ -346,8 +289,9 @@ public class UIHelper implements Eraser.Callback
 		ImageView iv = ImageHelper.CreateImage(_activity, id);
 		if (null != iv)
 		{
-			iv.setOnClickListener(_OnClickSelectInsert);
+			// iv.setOnClickListener(_OnClickSelectInsert);
 			iv.setOnLongClickListener(myOnLongClickListener);
+
 		}
 		return iv;
 	}
@@ -397,6 +341,79 @@ public class UIHelper implements Eraser.Callback
 	{
 		IsCommandStringChanged();
 	}
+
+	private final class mTouchListener implements OnTouchListener
+	{
+
+		public boolean onTouch(View view, MotionEvent motionEvent)
+		{
+			if (!bDragDrop)
+			{
+				return false;
+			}
+			if (motionEvent.getAction() == MotionEvent.ACTION_DOWN)
+			{
+				ClipData data = ClipData.newPlainText("", "");
+				DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
+				view.startDrag(data, shadowBuilder, view, 0);
+				// view.setVisibility(View.INVISIBLE);
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}// class MyTouchListener
+
+	class mDragListener implements OnDragListener
+	{
+		@Override
+		public boolean onDrag(View v, DragEvent event)
+		{
+
+			// Logger.Log.t(event.getAction(),(int) event.getX(), (int) event.getY());
+
+			switch (event.getAction())
+			{
+				case DragEvent.ACTION_DRAG_LOCATION:
+					if (_command_areaId == v.getId())
+					{
+						Pair<View, Integer> p = _command_area.GetIndex((int) event.getX(), (int) event.getY());
+						_img_selected.Unselect();
+						_img_selected.Set(p.first, p.second);
+						_img_selected.Select();
+					}
+					break;
+				case DragEvent.ACTION_DROP:
+
+					// Dropped, reassign View to ViewGroup
+					View view = (View) event.getLocalState();
+					ViewGroup owner = (ViewGroup) view.getParent();
+					if (_command_areaId == owner.getId())
+					{
+						owner.removeView(view);
+						break;
+					}
+					if (_command_areaId == v.getId() && _tools_areaId == owner.getId())
+					{
+						_img_selected.Unselect();
+						FlowLayout container = (FlowLayout) v;
+						ImageView iv = ImageToCommandArea(view.getId());
+						container.addView(iv, _img_selected.index);
+					}
+					break;
+				case DragEvent.ACTION_DRAG_STARTED:
+				case DragEvent.ACTION_DRAG_EXITED:
+				case DragEvent.ACTION_DRAG_ENTERED:
+				case DragEvent.ACTION_DRAG_ENDED:
+				default:
+					break;
+			}
+			return true;
+		}
+
+	}// class MyDragListener
 
 	// ------------------------------------------------------------------
 	// class Chunkof
@@ -464,7 +481,7 @@ public class UIHelper implements Eraser.Callback
 		{
 			_curr = 0;
 			_pos = 0;
-			_childCount = _command_aria.getChildCount();
+			_childCount = _command_area.getChildCount();
 		}
 
 		String GetChunk(int start, int number)
@@ -483,7 +500,7 @@ public class UIHelper implements Eraser.Callback
 
 			for (int k = start; k < nCount; ++k)
 			{
-				View v = _command_aria.getChildAt(k);
+				View v = _command_area.getChildAt(k);
 				char c = OpCode.OpcodeC(v.getId());
 				ret += c;
 			}

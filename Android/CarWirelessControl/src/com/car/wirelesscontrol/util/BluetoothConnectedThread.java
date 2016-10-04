@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.os.Handler;
+import android.util.Pair;
 
 public class BluetoothConnectedThread extends Thread
 {
@@ -31,6 +32,10 @@ public class BluetoothConnectedThread extends Thread
 		final char	PERFORM_ERROR		= 'E';
 
 		void BluetoothRespose(char c);
+
+		void ShowBluetoothStatus();
+
+		void ShowBluetoothErrorStatus();
 	}
 
 	static private BluetoothConnectedThread.Callback mCallback = null;
@@ -46,23 +51,41 @@ public class BluetoothConnectedThread extends Thread
 		{
 			return mmBluetoothDevice.getName();
 		}
+		Logger.Log.e("mmBluetoothDevice");
 		return DefaultDeviceName;
 
 	}
 
+	public boolean isConnected()
+	{
+		if (null == mmSocket)
+		{
+			return false;
+		}
+		return mmSocket.isConnected();
+	}
+
+	public Pair<Boolean, String> IsConnected()
+	{
+		return new Pair<Boolean, String>(isConnected(), DeviceName());
+	}
+
 	boolean Init(BluetoothAdapter bluetoothAdapter, final String mac)
 	{
+		Logger.Log.e("Init");
 		ResetConnection();
 		if (null == bluetoothAdapter)
 		{
 			Logger.Log.e("bluetoothAdapter is null");
+			mCallback.ShowBluetoothStatus();
 			return false;
 		}
 		mmBluetoothAdapter = bluetoothAdapter;
 		mmBluetoothDevice = bluetoothAdapter.getRemoteDevice(mac);
 		if (null == mmBluetoothDevice)
 		{
-			Logger.Log.e("bluetoth device is null");
+			Logger.Log.e("bluetooth device is null");
+			mCallback.ShowBluetoothStatus();
 			return false;
 		}
 		try
@@ -72,13 +95,19 @@ public class BluetoothConnectedThread extends Thread
 		catch (IOException e)
 		{
 			Logger.Log.e("device", e.getMessage());
+			mCallback.ShowBluetoothStatus();
 			return false;
 		}
 		return (null != mmSocket);
 	}
 
-	private void SocketStreams()
+	private boolean SocketStreams()
 	{
+		if (null == mmSocket)
+		{
+			mCallback.ShowBluetoothStatus();
+			return false;
+		}
 		InputStream tmpIn = null;
 		OutputStream tmpOut = null;
 		// Get the input and output streams, using temp objects because
@@ -91,30 +120,46 @@ public class BluetoothConnectedThread extends Thread
 		catch (IOException e)
 		{
 			Logger.Log.e("mmSocket.*Stream()", "is failed");
+			return false;
 		}
 		mmInStream = tmpIn;
 		mmOutStream = tmpOut;
+		return (mmInStream != null && mmOutStream != null);
 	}
 
-	private void ConnectSocket()
+	private boolean ConnectSocket()
 	{
-		try
+		synchronized (this)
 		{
-			mmSocket.connect();
-		}
-		catch (IOException connectException)
-		{
-			Logger.Log.e("mmSocket.connect()", "is failed");
+
+			if (null == mmSocket)
+			{
+				return false;
+			}
 			try
 			{
-				mmSocket.close();
+				mmSocket.connect();
+				return true;
 			}
-			catch (IOException closeException)
+			catch (IOException connectException)
 			{
-				Logger.Log.t("mmSocket.close()", "is failed");
+				Logger.Log.e("mmSocket.connect()", "is failed");
+				try
+				{
+					if (null != mmSocket)
+					{
+						mmSocket.close();
+					}
+				}
+				catch (IOException closeException)
+				{
+					Logger.Log.t("mmSocket.close()", "is failed");
+				}
+
+				mCallback.BluetoothRespose(Callback.CONNECT_ERROR);
+				mCallback.ShowBluetoothErrorStatus();
 			}
-			mCallback.BluetoothRespose(Callback.CONNECT_ERROR);
-			return;
+			return false;
 		}
 	}
 
@@ -126,11 +171,20 @@ public class BluetoothConnectedThread extends Thread
 		{
 			mmBluetoothAdapter.cancelDiscovery();
 		}
-		ConnectSocket();
-		SocketStreams();
+		if (!ConnectSocket())
+		{
+			mCallback.ShowBluetoothStatus();
+			return;
+		}
+		if (!SocketStreams())
+		{
+			mCallback.ShowBluetoothStatus();
+			return;
+		}
 		byte[] buffer = new byte[256]; // buffer store for the stream
 		int bytes = 0;
-
+		Logger.Log.t("Thread", "While", isConnected());
+		mCallback.ShowBluetoothStatus();
 		// Keep listening to the InputStream until an exception occurs
 		while (true)
 		{
@@ -153,15 +207,24 @@ public class BluetoothConnectedThread extends Thread
 			}
 			catch (IOException e)
 			{
-				Logger.Log.e("Thread END", e.getMessage());
+				Logger.Log.e("AUTO", "Thread END", e.getMessage());
 				break;
 			}
 		}
 		mCallback.BluetoothRespose(Callback.SOCKET_CLOSED);
-		Logger.Log.t("Thread END");
+		mCallback.ShowBluetoothErrorStatus();
+		Logger.Log.t("AUTO", "Thread END");
 	}
 
 	private void ResetConnection()
+	{
+		synchronized (this)
+		{
+			__ResetConnection();
+		}
+	}
+
+	private void __ResetConnection()
 	{
 		if (mmInStream != null)
 		{
@@ -201,53 +264,23 @@ public class BluetoothConnectedThread extends Thread
 		mmBluetoothDevice = null;
 	}
 
-	public boolean isConnected()
-	{
-		if (null == mmSocket)
-		{
-			return false;
-		}
-		return mmSocket.isConnected();
-	}
-
-	/* Call this from the main activity to send data to the remote device */
-	public void Send(char c)
-	{
-		if (0 == c)
-		{
-			return;
-		}
-		if (null == mmOutStream)
-		{
-			return;
-		}
-		try
-		{
-			mmOutStream.write(c);
-		}
-		catch (IOException e)
-		{
-			mCallback.BluetoothRespose(Callback.SOCKET_CLOSED);
-			Cancel();
-			Logger.Log.t("Send(char)", e.getMessage());
-		}
-	}
-
 	public void Send(String message)
 	{
-		if (null == mmOutStream)
+		if (null != mmOutStream)
 		{
-			return;
+			byte[] msgBuffer = message.getBytes();
+			try
+			{
+				mmOutStream.write(msgBuffer);
+				return;
+			}
+			catch (IOException e)
+			{
+				Logger.Log.t("Send(String)", e.getMessage());
+			}
 		}
-		byte[] msgBuffer = message.getBytes();
-		try
-		{
-			mmOutStream.write(msgBuffer);
-		}
-		catch (IOException e)
-		{
-			Logger.Log.t("Send(String)", e.getMessage());
-		}
+
+		mCallback.BluetoothRespose(Callback.CONNECT_ERROR);
 	}
 
 	/* Call this from the main activity to shutdown the connection */
